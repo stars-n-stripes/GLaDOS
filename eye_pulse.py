@@ -6,7 +6,7 @@ from gpiozero import PWMLED
 # from tkgpio import TkCircuit
 from math import floor
 
-
+# https://stackoverflow.com/questions/40138031/how-to-read-realtime-microphone-audio-volume-in-python-and-ffmpeg-or-similar
 
 output = []
 

@@ -68,6 +68,15 @@ def eye_blink(indata, outdata, frames, time, status):
     pwm_value = EYE_LEVEL.update(out)
     EYE.value = pwm_value
 
+def eye_blink_listen(indata, frames, time, status):
+    global EYE, EYE_LEVEL
+    out = np.linalg.norm(indata) / 10
+    print(out)
+    # print(pwm_value)
+    # Update the LED
+    pwm_value = EYE_LEVEL.update(out)
+    EYE.value = pwm_value
+
 
 def eye_blink_nofilter(indata, outdata, frames, time, status):
     global LAST_PWM
@@ -94,9 +103,10 @@ def eye_blink_nofilter(indata, outdata, frames, time, status):
     EYE.value = pwm_value
     # DEBUG: print latency
 
-def main():
+def play_file():
     loop_to_output = sd.Stream(callback=eye_blink, device=("Loopback: PCM (hw:2,1)","HDMI 1"),dtype="float32",
                         channels=(2,2), samplerate=48000, blocksize=1024)
+    loop_to_output.start()
     with loop_to_output:
         # sd.play("test.wav", device=8, dtype="float32")
 
@@ -126,7 +136,17 @@ def main():
 
         #     sd.play(data, fs, device=6)
         #     status = sd.wait()
-
+def main():
+    """If this is called with main, listen forever on the given device, forwarding all data to a virtual input
+    """
+    loop_to_output = sd.Stream(callback=eye_blink, device=("Loopback: PCM (hw:3,0)","HDMI 1"),dtype="float32",
+                        channels=(2,2), samplerate=48000, blocksize=1024)
+    loop_to_output.start()
+    with loop_to_output:        
+        print("Starting Stream")
+        while True:
+            # sleep(1000)
+            pass
 
 if __name__ == '__main__':
     main()

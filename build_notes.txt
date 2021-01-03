@@ -1,0 +1,6 @@
+List of files that I've changed: default.pa, .bashrc
+bluez-alsa is built from source
+Need to build bluez dev stuff with sudo apt install bluez-*
+Also need to sudo apt install -y libbluetooth-dev
+Also need to sudo apt install -y dbus-x11 libdbus-1-dev libsbc-dev libfdk-aac*
+Used custom .asoundrc

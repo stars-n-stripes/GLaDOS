@@ -7,6 +7,12 @@ from gpiozero import PWMLED
 from math import floor, ceil
 from time import sleep
 import wave
+import threading
+from sys import argv
+import asyncio
+from functools import partial
+import sys
+import queue
 
 
 # Copied with awe from https://github.com/scottlawsonbc/audio-reactive-led-strip/blob/master/python/dsp.py
@@ -32,6 +38,10 @@ class ExpFilter:
         self.value = max(self.value, 0.25) # Bind value within [0,1]
         return min(self.value, 1) # So we don't error out the LED
 
+
+
+
+
 # https://stackoverflow.com/questions/40138031/how-to-read-realtime-microphone-audio-volume-in-python-and-ffmpeg-or-similar
 
 output = []
@@ -40,6 +50,94 @@ EYE = PWMLED(17)
 BLOCKSIZE = 1024
 LAST_PWM = 0
 EYE_LEVEL = ExpFilter(val=0.5)
+BT_DELAY = 0.5
+
+async def pwm_updater(pwm_value, delay):
+    """Set the PWMLED pin after waiting a small amount of time
+
+    Args:
+        pwm_value (float): new PWM value within the bounds [0.0, 1.0]
+        delay (float): Delay, in seconds, before setting the GPIO pin
+    """
+    global EYE
+    await asyncio.sleep(delay)
+    EYE.value = pwm_value
+
+# Oodles of asynchronous examples from sd docs:
+# https://python-sounddevice.readthedocs.io/en/0.4.1/examples.html#creating-an-asyncio-generator-for-audio-blocks
+
+async def inputstream_generator(channels=1, **kwargs):
+    """Generator that yields blocks of input data as NumPy arrays."""
+    q_in = asyncio.Queue()
+    loop = asyncio.get_event_loop()
+
+    def callback(indata, frame_count, time_info, status):
+        loop.call_soon_threadsafe(q_in.put_nowait, (indata.copy(), status))
+
+    stream = sd.InputStream(callback=callback, channels=channels, **kwargs)
+    with stream:
+        while True:
+            indata, status = await q_in.get()
+            yield indata, status
+
+
+async def stream_generator(blocksize, *, channels=1, dtype='float32',
+                           pre_fill_blocks=10, **kwargs):
+    """Generator that yields blocks of input/output data as NumPy arrays.
+
+    The output blocks are uninitialized and have to be filled with
+    appropriate audio signals.
+
+    """
+    assert blocksize != 0
+    q_in = asyncio.Queue()
+    q_out = queue.Queue()
+    loop = asyncio.get_event_loop()
+
+    def callback(indata, outdata, frame_count, time_info, status):
+        loop.call_soon_threadsafe(q_in.put_nowait, (indata.copy(), status))
+        outdata[:] = q_out.get_nowait()
+
+    # pre-fill output queue
+    for _ in range(pre_fill_blocks):
+        q_out.put(np.zeros((blocksize, channels), dtype=dtype))
+
+    stream = sd.Stream(blocksize=blocksize, callback=callback, dtype=dtype,
+                       channels=channels, **kwargs)
+    with stream:
+        while True:
+            indata, status = await q_in.get()
+            outdata = np.empty((blocksize, channels), dtype=dtype)
+            yield indata, outdata, status
+            q_out.put_nowait(outdata)
+
+
+# async def print_input_infos(**kwargs):
+#     """Show minimum and maximum value of each incoming audio block."""
+#     async for indata, status in inputstream_generator(**kwargs):
+#         if status:
+#             print(status)
+#         print('min:', indata.min(), '\t', 'max:', indata.max())
+
+
+async def wire_coro(delay=0.5, **kwargs):
+    """Create a connection between audio inputs and outputs.
+
+    Asynchronously iterates over a stream generator and for each block
+    simply copies the input data into the output block.
+
+    """
+    async for indata, outdata, status in stream_generator(**kwargs):
+        if status:
+            print(status)
+
+        # Extract the expected value and send it to the delayed GPIO pin
+        out = np.linalg.norm(indata) / 10
+        pwm_value = EYE_LEVEL.update(out)
+        asyncio.create_task(pwm_updater(pwm_value, delay))
+
+        outdata[:] = indata
+
 
 def print_sound(indata, outdata, frames, time, status):
     # volume_norm = np.linalg.norm(indata)
@@ -67,6 +165,24 @@ def eye_blink(indata, outdata, frames, time, status):
     # Update the LED
     pwm_value = EYE_LEVEL.update(out)
     EYE.value = pwm_value
+
+
+
+
+def eye_blink_bt(indata, outdata, frames, time, status, queue, delay):
+    global EYE, EYE_LEVEL
+    out = np.linalg.norm(indata) / 10
+
+    # Send the audio on to our output sink
+    outdata[:] = indata
+
+    # print(pwm_value)
+    # Enqueue a new LED value to the gpio worker
+    pwm_value = EYE_LEVEL.update(out)
+    print("placing into queue...")
+    queue.put_nowait((pwm_value, delay))
+    
+
 
 def eye_blink_listen(indata, frames, time, status):
     global EYE, EYE_LEVEL
@@ -136,17 +252,46 @@ def play_file():
 
         #     sd.play(data, fs, device=6)
         #     status = sd.wait()
-def main():
+async def main():
     """If this is called with main, listen forever on the given device, forwarding all data to a virtual input
     """
-    loop_to_output = sd.Stream(callback=eye_blink, device=("Loopback: PCM (hw:3,0)","HDMI 1"),dtype="float32",
-                        channels=(2,2), samplerate=48000, blocksize=1024)
-    loop_to_output.start()
-    with loop_to_output:        
-        print("Starting Stream")
+
+    #TODO: replace with ArgParse
+    if argv[1] == "bt":
+             audio_delay = BT_DELAY
+    else:
+        audio_delay = 0
+
+    audio_task = asyncio.create_task(wire_coro(delay=audio_delay, device=("Loopback ,0)","googlehome"),dtype="float32",
+                        channels=2, samplerate=48000, blocksize=1024))
+    # Or...
+    # audio_task = asyncio.create_task(wire_coro(**kwargs))
+    try:
         while True:
-            # sleep(1000)
-            pass
+            await asyncio.sleep(1)
+
+    except asyncio.CancelledError:
+        print('\nwire was cancelled')
+    except KeyboardInterrupt:
+        print("Shutting down stream...")
+        audio_task.cancel()
+        try:
+            await audio_task
+        except asyncio.CancelledError:
+            print("Shutdown stream. Goodbye!")
+            sys.exit(0)
+        
+        
+    # else:
+    #     print("Creating HDMI Stream...")
+    #     loop_to_output = sd.Stream(callback=eye_blink, device=("Loopback ,0)","HDMI"),dtype="float32",
+    #                         channels=(2,2), samplerate=48000, blocksize=1024)
+    #     loop_to_output.start()
+    #     with loop_to_output:        
+    #         print("Starting Stream")
+    #         while True:
+    #             # sleep(1000)
+    #             pass
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

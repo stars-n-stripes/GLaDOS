@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from gpiozero.pins.mock import MockFactory, MockPWMPin
 from gpiozero import Servo, Device
 import curses
@@ -10,33 +12,54 @@ parser.add_argument("--test", nargs="?", const=True, default=False)
 LOG_FILE = open("stdout.txt", "w")
 
 
-def draw_servos(servos, window, twist=-1):
+def draw_vertical_servo(servo, window, title="Servo"):
     """
-    Draw the servos on the given window, assuming the last servo provided is the
-    non-visualized "twist" servo
-    :param servos: list of gpiozero Servo objects
+    Draw the servos on the given window, filling in the initial value.
+    
+    :param servo: gpiozero Servo 
     :param window: curses window
-    :param twist: index of the 20kg "twist" Servo
     :return:
     """
-    assert abs(twist) <= len(servos)
-    max_x = curses.COLS
-    max_y = curses.LINES
+    # Give the window a title
+    add_title(window, title)
 
-    for i, servo in enumerate(servos):
-        if servos[i] == servos[twist]:
-            # Hit the twist servo; draw this one horizontally
-            #..later
-            pass
+    # Create a vertical bar based on the current value of the servo
+    # Use the entire height, minus a header/footer and padding on each side
+    avail_height, width = window.getmaxyx()
+    avail_height -= 1
+    midpoint = width // 2
+
+    # Get the current value of the servo as a threshold
+    curr_val = servo.value
+
+    for y in range(2, avail_height): #start at two to account for the title
+        if y == 2:
+            window.addstr(y, midpoint-1, "[{:.2f}]".format(curr_val))
+        elif y == avail_height-1:
+            window.addstr(y, midpoint-1, "[0]")
+
         else:
-            window
+            # Determine whether or not the servo level should fill this bar as much 
+            if y / avail_height >= curr_val:
+                window.addstr(y, midpoint-1, "|=|")
+            else:
+                window.addstr(y, midpoint-1, "| |")
+    # window.refresh()
+            
+    
+    
 
 
-def add_title(servo_ctl, servo_ctl_title):
+    
+    
+    
+
+
+def add_title(window, title):
     # - len nonsense is to center the title
 
-    servo_ctl.addstr(1, servo_ctl.getmaxyx()[1] // 2 - len(servo_ctl_title) // 2,
-                     servo_ctl_title)
+    window.addstr(1, window.getmaxyx()[1] // 2 - len(title) // 2,
+                     title)
 
 
 def main(stdscr):
@@ -57,7 +80,11 @@ def main(stdscr):
         twist = Servo(21)
 
     servos = [head, neck, arm, twist]
-    
+    # Debug
+    head.value = 0.33
+    neck.value = 0.66
+    arm.value = 0.5
+    twist.value = 0.75
 
     
     # Start up the curses
@@ -106,14 +133,21 @@ def main(stdscr):
     # servo_view.bkgd(' ', curses.color_pair(1) | curses.A_BOLD)
     # servo_view.addstr(1,1, "This is not blue")
     # servo_view.getch()
-    servo_ctl.bkgd(' ', curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
     # servo_ctl.refresh()
     
     # Draw the current servo levels
-    # draw_servos()
+    draw_vertical_servo(head, h_ctl, "Head Servo")
+    draw_vertical_servo(neck,n_ctl, "Neck Servo")
+    draw_vertical_servo(arm, a_ctl, "Arm Servo")
+
+
+    servo_ctl.bkgd(' ', curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
+    # Apply the background colors to all writes that have occured
+    servo_ctl.attron(curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
 
     servo_ctl.getch()
     
+
     
 
 

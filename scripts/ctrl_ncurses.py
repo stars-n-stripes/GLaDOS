@@ -32,6 +32,12 @@ def draw_servos(servos, window, twist=-1):
             window
 
 
+def add_title(servo_ctl, servo_ctl_title):
+    # - len nonsense is to center the title
+
+    servo_ctl.addstr(1, servo_ctl.getmaxyx()[1] // 2 - len(servo_ctl_title) // 2,
+                     servo_ctl_title)
+
 
 def main(stdscr):
     args = parser.parse_args()
@@ -68,10 +74,28 @@ def main(stdscr):
     servo_view = curses.newwin(height, width, begin_y, begin_x)
 
     # Add another window for the servo control and create a border for it
-    servo_ctl = curses.newwin(curses.LINES - 1, curses.COLS // 2 , 0, width + 1)
-    servo_ctl.border()
-    #TODO: Create subwindows for each servo
-    # servo_ctl.refresh()
+    servo_ctl = curses.newwin(curses.LINES - 1, width + 1, 0, width + 1)
+    # servo_ctl.border()
+    t_ctl = servo_ctl.derwin(3 * height // 4 + 1, 0)
+    a_ctl = servo_ctl.derwin(3 * height // 4-2, width // 3, 3, 0)
+    h_ctl = servo_ctl.derwin(3 * height // 4-2, width // 3 + 1, 3, width // 3 + 1)
+    n_ctl = servo_ctl.derwin(3 * height // 4-2, width // 3, 3, 2 * width // 3 +2)
+
+    # n_ctl = servo_ctl.derwin()
+    # a_ctl = servo_ctl.derwin()
+    # t_ctl = servo_ctl.derwin()
+    a_ctl.border()
+    h_ctl.border()
+    t_ctl.border()
+    n_ctl.border()
+
+    # place titles
+    servo_ctl_title = "[GLaDOS Servo Control v0.1]"
+
+    add_title(servo_ctl, servo_ctl_title)
+    add_title(servo_view, "[Current Servo Positions]")
+
+    servo_ctl.refresh()
 
     # Add a border around the GLaDOS view
     servo_view.border()
@@ -86,7 +110,7 @@ def main(stdscr):
     # servo_ctl.refresh()
     
     # Draw the current servo levels
-    draw_servos()
+    # draw_servos()
 
     servo_ctl.getch()
     

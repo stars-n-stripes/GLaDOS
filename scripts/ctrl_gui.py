@@ -12,7 +12,7 @@ class Example(tk.Frame):
         # create a canvas
         self.canvas = tk.Canvas(width=200, height=200, background="white")
         # self.canvas.pack(fill="both", expand=True)
-        # self.canvas.pack()
+        self.canvas.pack()
         self.controls = tk.Frame(width=400, height=400)
         self.controls.pack(fill="both", expand=True)
 
@@ -30,28 +30,75 @@ class Example(tk.Frame):
         self.canvas.tag_bind("token", "<ButtonRelease-1>", self.drag_stop)
         self.canvas.tag_bind("token", "<B1-Motion>", self.drag)
 
+        self.create_servoctl()
+
+
+
+
+
+    def create_servoctl(self):
+        """
+        Create a tk scale, place it on the canvas, and associate it with a servo
+        Also create all three servos - we don't want to be able to instantiate any more/less than 3
+
+        """
         # Create three vertical sliders for the 9g servos
+        # Create a horizontal slider for the 20kg servo
         self.controls.twist = tk.Scale(orient="horizontal")
         self.controls.neck = tk.Scale()
         self.controls.arm = tk.Scale()
         self.controls.head = tk.Scale()
-        self.controls.head.pack(side=tk.BOTTOM)
-        self.controls.arm.pack(side=tk.BOTTOM)
-        self.controls.neck.pack(side=tk.BOTTOM)
+        self.controls.head.pack(side=tk.LEFT)
+        self.controls.arm.pack(side=tk.LEFT)
+        self.controls.neck.pack(side=tk.LEFT)
         self.controls.twist.pack(side=tk.TOP, expand=True, fill="x")
-        # Create a horizontal slider for the 20kg servo
+
+        # Build three ovals
+        # Head
+        c_width = self.canvas.winfo_width()
+        c_height = self.canvas.winfo_height()
+        self.head_oval = self.canvas.create_oval(
+            x=c_width/4,
+            y=c_height/4,
+            outline="black",
+            fill="white",
+            tags=("servogui")
+        )
+        self.neck_oval = self.canvas.create_oval(
+            x=c_width/3,
+            y=c_height/3,
+            outline="black",
+            fill="white",
+            tags=("servogui")
+        )
+        self.arm_oval = self.canvas.create_oval(
+            x=3*c_width/2,
+            y=3*c_height/2,
+            outline="black",
+            fill="white",
+            tags=("servogui")
+        )
 
 
-    def create_servoctl(self, x, y, horizontal=False):
-        """
-        Create a tk scale, place it on the canvas, and associate it with a servo
+        # Add connecting lines
+        self.head_neck_line = self.canvas.create_line(
+            c_width/4,
+            c_height/4,
+            c_width / 3,
+            c_height / 3,
+            fill="black"
+        )
+        self.neck_arm_line = self.canvas.create_line(
+            x=c_width/3,
+            y=c_height/3,
+            fill="black"
+        )
 
-        """
-        o = "horizontal" if horizontal else "vertical"
-        self.canvas
 
-    def create_token(self, x, y, color):
+
+    def create_token(self, x, y, color, tag=None):
         """Create a token at the given coordinate in the given color"""
+        t = ("token", tag) if tag else ("token")
         self.canvas.create_oval(
             x - 25,
             y - 25,
@@ -59,7 +106,7 @@ class Example(tk.Frame):
             y + 25,
             outline=color,
             fill=color,
-            tags=("token",),
+            tags=t
         )
 
     def drag_start(self, event):
@@ -86,6 +133,8 @@ class Example(tk.Frame):
         # record the new position
         self._drag_data["x"] = event.x
         self._drag_data["y"] = event.y
+    def console_servo(self,value, servo="no_name"):
+        print(servo, ": ", value)
 
 if __name__ == "__main__":
     root = tk.Tk()

@@ -4,6 +4,7 @@ from gpiozero.pins.mock import MockFactory, MockPWMPin
 from gpiozero import Servo, Device
 import curses
 import argparse
+import math
 from time import sleep
 
 parser = argparse.ArgumentParser()
@@ -116,6 +117,8 @@ def draw_servo(y, x, window, servo, icon=SERVO_ASCII_3X3):
         # Best guess
         xoffset = yoffset = len(icon) // max(icon.count("\n"), 1)
 
+    # window.addstr(str(xoffset) + "/" + str(yoffset))
+    # window.addstr(str(x)+ str(y))
     # Curses doesn't work super well with strings that contain newlines
     # window.addstr(max(y-yoffset, 0), max(x-xoffset, 0), icon)
     for line in icon.splitlines(keepends=False):
@@ -123,11 +126,41 @@ def draw_servo(y, x, window, servo, icon=SERVO_ASCII_3X3):
         yoffset -= 1
 
 
+
 def add_title(window, title):
     # - len nonsense is to center the title
 
     window.addstr(1, window.getmaxyx()[1] // 2 - len(title) // 2,
                      title)
+
+
+def draw_servo_chain(servo_dict, window):
+    """
+    Draw the servos in a list as a chain resembling GLaDOS' arm on the provided window
+    :param dict servo_dict: Dictonary of servo objects, with the following names:
+                        "arm"
+                        "head"
+                        "neck"
+    :param window: The Window object to draw the servos on
+    :return:
+    """
+    # Place the arm servo in the center of the window
+    # Save the center of the arm servo
+    ay, ax = window.getmaxyx()
+    ax = ax // 2
+    ay = ay // 2
+
+    draw_servo(ay, ax, window, servo_dict["arm"])
+
+    # Place the neck servo on the same vertical as the arm servo, shifting it down based on the arm servo's value
+    # Save where it ends up
+
+    nx = ax // 2
+    # asin will return 90 degrees for 1 (full ext), 0 deg for 0 (no ext)
+    #TODO: Start here
+    angle_between = - math.asin(servo_dict["arm"].value())
+
+    # Place the head servo on the same vertical as the neck.
 
 
 def main(stdscr):
@@ -210,8 +243,8 @@ def main(stdscr):
     draw_horizontal_servo_ctl(twist, t_ctl, "Twist Servo")
 
     # Draw the ASCIIART servo
-    draw_servo(10,10,servo_view, head)
-
+    # draw_servo(10,10,servo_view, head)
+    draw_servo_chain({"arm": arm, "head": head, "neck": neck}, servo_view)
     servo_ctl.bkgd(' ', curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
     # Apply the background colors to all writes that have occured
     servo_ctl.attron(curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
@@ -226,4 +259,3 @@ def main(stdscr):
 
 if __name__ == '__main__':
     curses.wrapper(main)
-    print(SERVO_ASCII_3X3)
